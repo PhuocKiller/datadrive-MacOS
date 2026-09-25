@@ -121,5 +121,19 @@ Chạy thẳng app trong `image-…` trên máy build sẽ nạp **hai bản Qt*
 chạy được, nên rất dễ tưởng là ổn). `--bundle` xoá các rpath đó, bỏ bản sao thừa của
 `libdatadrive*.dylib` trong `Contents/MacOS`, rồi kiểm tra không còn tham chiếu nào vào craft.
 
-Chưa có chứng chỉ Developer ID nên app chỉ ký ad-hoc (`codesign --force --deep --sign -`).
-Máy khác mở lần đầu sẽ bị Gatekeeper chặn: chuột phải → Open.
+### Ký và notarize
+
+```bash
+export DATADRIVE_SIGN_IDENTITY="Developer ID Application: Phuoc Tran (9BHT63MRZH)"
+packaging/craft/craft-macos.sh --bundle 1.0.0      # ký từ trong ra ngoài, hardened runtime, timestamp
+export DATADRIVE_NOTARY_KEY_ID=<key id> DATADRIVE_NOTARY_ISSUER=<issuer id>   # API key App Store Connect
+packaging/craft/craft-macos.sh --notarize 1.0.0    # notarize + staple app, dựng lại DMG, ký, notarize + staple DMG
+```
+
+Key `.p8` phải nằm ở `~/.appstoreconnect/private_keys/AuthKey_<key id>.p8`. Không cần provisioning
+profile: app group có tiền tố Team ID (`9BHT63MRZH.…`), không có entitlement `com.apple.developer.*`,
+và không build mô-đun File Provider. Thiếu `DATADRIVE_SIGN_IDENTITY` thì app được ký ad-hoc: chạy
+được trên máy build nhưng tiện ích Finder bị chặn (`Launch Constraint Violation`) và máy khác không mở.
+
+App **không dùng sandbox** (`admin/osx/macosx.entitlements.cmake`): nó phải tự tạo và tự xoá thư mục
+đồng bộ. Hệ quả là không đưa lên Mac App Store được, chỉ phát hành DMG.
