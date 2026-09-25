@@ -6,6 +6,10 @@
 
 #include "application.h"
 
+#ifdef Q_OS_MACOS
+#include "launchhandler_mac.h"
+#endif
+
 #include "account.h"
 #include "accountmanager.h"
 #include "accountsetupcommandlinemanager.h"
@@ -514,6 +518,23 @@ Application::Application(int &argc, char **argv)
     _gui->createTray();
 
     handleUriFromOptions();
+
+    // Opening the app yourself shows its window, instead of only putting an icon in the tray or menu
+    // bar that looks like nothing happened; starting at login does not. Without an account the
+    // wizard opens anyway.
+    const auto showWindowIfAccounts = [this] {
+        if (!AccountManager::instance()->accounts().isEmpty()) {
+            showMainDialog();
+        }
+    };
+#ifdef Q_OS_MACOS
+    Mac::installLaunchHandlers(showWindowIfAccounts);
+#else
+    // Autostart passes --background (utility_win.cpp, utility_unix.cpp).
+    if (!backgroundMode()) {
+        QTimer::singleShot(0, this, showWindowIfAccounts);
+    }
+#endif
 
 #ifdef Q_OS_MACOS
     // If any sync folder needs sandbox reapproval after upgrading to v33+,

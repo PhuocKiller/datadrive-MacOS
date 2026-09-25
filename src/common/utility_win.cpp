@@ -289,7 +289,8 @@ void Utility::setLaunchOnStartup(const QString &appName, const QString &guiName,
     QString runPath = QLatin1String(runPathC);
     QSettings settings(runPath, QSettings::NativeFormat);
     if (enable) {
-        settings.setValue(appName, QDir::toNativeSeparators(QCoreApplication::applicationFilePath()));
+        // --background: started at login the client stays in the tray; opened by the user it shows its window.
+        settings.setValue(appName, QStringLiteral("\"%1\" --background").arg(QDir::toNativeSeparators(QCoreApplication::applicationFilePath())));
     } else {
         settings.remove(appName);
     }
