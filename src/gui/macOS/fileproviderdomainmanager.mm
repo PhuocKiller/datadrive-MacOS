@@ -7,8 +7,10 @@
 
 #import <AppKit/AppKit.h>
 #import <FileProvider/FileProvider.h>
+#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
 #include <QDir>
+#include <QFileInfo>
 #include <QLatin1StringView>
 #include <QList>
 #include <QLoggingCategory>
@@ -27,6 +29,32 @@ namespace OCC {
 
 Q_LOGGING_CATEGORY(lcMacFileProviderDomainManager, "nextcloud.gui.macfileproviderdomainmanager", QtInfoMsg)
 
+namespace
+{
+
+/// Finder names the domain folder "<app>-<domain display name>", so the domain is named after the user
+/// alone to give "DataDrive-<user>", like the classic sync folder ~/DataDrive-<user>. Upstream uses
+/// "<server> - <user>" instead, which in a single-server build only repeats the server.
+///
+/// A user name ending in an extension LaunchServices treats as a package (someone@example.app) would
+/// turn the root folder into a bundle (issues #7979 / #9684); those keep "<server> - <user>".
+QString domainDisplayName(const OCC::AccountPtr &account)
+{
+    const auto user = account->davUser();
+    if (user.isEmpty()) {
+        return account->shortcutName();
+    }
+    const auto extension = QFileInfo(user).suffix();
+    if (!extension.isEmpty()) {
+        UTType *const type = [UTType typeWithFilenameExtension:extension.toNSString()];
+        if (type && [type conformsToType:UTTypePackage]) {
+            return account->shortcutName();
+        }
+    }
+    return user;
+}
+
+}
 }
 
 namespace OCC {
@@ -340,7 +368,7 @@ public:
             }
 
             const auto currentDisplayName = QString::fromNSString(domain.displayName);
-            const auto desiredDisplayName = accountState->account()->shortcutName();
+            const auto desiredDisplayName = domainDisplayName(accountState->account());
 
             if (currentDisplayName == desiredDisplayName) {
                 continue;
@@ -390,7 +418,7 @@ public:
         // Domains registered with a stale display name (e.g. the legacy U+2024-escaped form, or
         // a name from before `prettyName()` was updated) are normalised on launch by
         // `reconcileDomainDisplayNames()`.
-        const auto domainDisplayName = account->shortcutName();
+        const auto displayName = domainDisplayName(account);
 
         if (!existingDomainId.isEmpty()) {
             const auto domains = getDomains();
@@ -408,7 +436,7 @@ public:
         }
 
         const auto domainId = QUuid::createUuid().toString(QUuid::WithoutBraces);
-        NSFileProviderDomain * const domain = [[NSFileProviderDomain alloc] initWithIdentifier:domainId.toNSString() displayName:domainDisplayName.toNSString()];
+        NSFileProviderDomain *const domain = [[NSFileProviderDomain alloc] initWithIdentifier:domainId.toNSString() displayName:displayName.toNSString()];
         domain.supportsSyncingTrash = YES;
 
         if (!addDomain(domain)) {

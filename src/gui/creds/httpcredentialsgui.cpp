@@ -4,18 +4,19 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
+#include "creds/httpcredentialsgui.h"
+#include "account.h"
+#include "common/asserts.h"
+#include "config.h"
+#include "networkjobs.h"
+#include "theme.h"
+#include <QBuffer>
+#include <QDesktopServices>
 #include <QInputDialog>
 #include <QLabel>
-#include <QDesktopServices>
+#include <QMessageBox>
 #include <QNetworkReply>
 #include <QTimer>
-#include <QBuffer>
-#include "creds/httpcredentialsgui.h"
-#include "theme.h"
-#include "account.h"
-#include "networkjobs.h"
-#include <QMessageBox>
-#include "common/asserts.h"
 
 using namespace QKeychain;
 
@@ -34,6 +35,15 @@ void HttpCredentialsGui::askFromUser()
 
 void HttpCredentialsGui::askFromUserAsync()
 {
+#if APPLICATION_FORCE_IN_APP_LOGIN
+    // This build signs in with a password typed into the client, and its wizard never asks the
+    // server how (see Theme). The server answers LoginFlowV2 from version 16 on, which the branch
+    // below turned into a silent failure: after logging out, logging in again showed nothing and
+    // the account went straight back to "Signed out".
+    showDialog();
+    return;
+#endif
+
     // First, we will check what kind of auth we need.
     auto job = new DetermineAuthTypeJob(_account->sharedFromThis(), this);
     QObject::connect(job, &DetermineAuthTypeJob::authType, this, [this](DetermineAuthTypeJob::AuthType type) {
