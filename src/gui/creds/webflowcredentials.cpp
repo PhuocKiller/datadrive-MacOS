@@ -5,6 +5,8 @@
 
 #include "webflowcredentials.h"
 
+#include "config.h"
+
 #include "creds/httpcredentials.h"
 #include "creds/keychainchunk.h"
 #include "accessmanager.h"
@@ -15,6 +17,7 @@
 #include "networkjobs.h"
 
 #include <QAuthenticator>
+#include <QInputDialog>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QPointer>
@@ -142,6 +145,14 @@ void WebFlowCredentials::fetchFromKeychain(const QString &appName) {
 }
 
 void WebFlowCredentials::askFromUser() {
+#if APPLICATION_FORCE_IN_APP_LOGIN
+    // This build signs in with a password typed into the client and never uses the browser login
+    // flow. The re-authentication window below is that flow ("Switch to your browser"), so logging
+    // in again after a logout would send the user somewhere the build does not support.
+    askForPasswordInApp();
+    return;
+#endif
+
     if (_reAuthWindow) {
         _reAuthWindow->show();
         return;
@@ -159,6 +170,40 @@ void WebFlowCredentials::askFromUser() {
     _reAuthWindow->show();
 
     qCDebug(lcWebFlowCredentials()) << "User needs to reauth!";
+}
+
+void WebFlowCredentials::askForPasswordInApp()
+{
+    if (_passwordDialog) {
+        _passwordDialog->raise();
+        _passwordDialog->activateWindow();
+        return;
+    }
+
+    auto *const dialog = new QInputDialog();
+    _passwordDialog = dialog;
+    dialog->setAttribute(Qt::WA_DeleteOnClose, true);
+    dialog->setWindowTitle(tr("Log in to %1").arg(Theme::instance()->appNameGUI()));
+    dialog->setLabelText(tr("Enter the password of %1 to log in again.").arg(_user));
+    dialog->setTextEchoMode(QLineEdit::Password);
+    dialog->setOkButtonText(tr("Log in"));
+
+    connect(dialog, &QDialog::finished, this, [this, dialog](int result) {
+        if (result == QDialog::Accepted && !dialog->textValue().isEmpty()) {
+            qCInfo(lcWebFlowCredentials()) << "Obtained a new password in the app";
+            _password = dialog->textValue();
+            _ready = true;
+            _credentialsValid = true;
+            persist();
+        } else {
+            qCDebug(lcWebFlowCredentials()) << "User cancelled reauth!";
+        }
+        Q_EMIT asked();
+    });
+
+    dialog->open();
+    dialog->raise();
+    dialog->activateWindow();
 }
 
 void WebFlowCredentials::slotAskFromUserCredentialsProvided(const QString &user, const QString &pass) {

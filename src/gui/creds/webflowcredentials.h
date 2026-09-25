@@ -16,6 +16,7 @@
 
 class QNetworkReply;
 class QAuthenticator;
+class QDialog;
 
 namespace QKeychain {
     class Job;
@@ -80,6 +81,10 @@ private Q_SLOTS:
     void slotWriteJobDone(QKeychain::Job *);
 
 private:
+    /// The re-login prompt of a build with APPLICATION_FORCE_IN_APP_LOGIN: a password field, no browser.
+    void askForPasswordInApp();
+    QPointer<QDialog> _passwordDialog;
+
     /*
      * Windows: Workaround for CredWriteW used by QtKeychain
      *
