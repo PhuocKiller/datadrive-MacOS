@@ -10,6 +10,7 @@
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
 #include <QDir>
+#include <QDirIterator>
 #include <QFileInfo>
 #include <QLatin1StringView>
 #include <QList>
@@ -52,6 +53,20 @@ QString domainDisplayName(const OCC::AccountPtr &account)
         }
     }
     return user;
+}
+
+/// Removing a domain while preserving dirty user data leaves a "DataDrive-<user> (<date>)" folder as
+/// soon as Finder has written a .DS_Store into the domain, even when every file was synced. A folder
+/// holding nothing but Finder's view settings is not the user's data.
+bool holdsOnlyFinderMetadata(const QString &path)
+{
+    QDirIterator it(path, QDir::Files | QDir::Hidden | QDir::System | QDir::NoDotAndDotDot, QDirIterator::Subdirectories);
+    while (it.hasNext()) {
+        if (QFileInfo(it.next()).fileName() != QStringLiteral(".DS_Store")) {
+            return false;
+        }
+    }
+    return true;
 }
 
 }
@@ -97,6 +112,32 @@ public:
 
         dispatch_group_wait(dispatchGroup, DISPATCH_TIME_FOREVER);
         return addSucceeded;
+    }
+
+    /**
+     * @brief Remove the downloaded copies of every item in the domain, keeping only placeholders.
+     *
+     * A disconnected domain still serves the files already on disk, so logging out would leave
+     * them readable. Items with changes that were not uploaded yet cannot be evicted and stay.
+     */
+    void evictAll(NSFileProviderDomain *domain)
+    {
+        qCInfo(lcMacFileProviderDomainManager) << "Evicting downloaded items of domain" << domain.identifier;
+        dispatch_group_t dispatchGroup = dispatch_group_create();
+        dispatch_group_enter(dispatchGroup);
+        NSFileProviderManager * const manager = [NSFileProviderManager managerForDomain:domain];
+
+        [manager evictItemWithIdentifier:NSFileProviderRootContainerItemIdentifier completionHandler:^(NSError * const error) {
+            if (error) {
+                qCWarning(lcMacFileProviderDomainManager) << "Could not evict every item of domain"
+                                                          << domain.identifier
+                                                          << error.code
+                                                          << error.localizedDescription;
+            }
+            dispatch_group_leave(dispatchGroup);
+        }];
+
+        dispatch_group_wait(dispatchGroup, DISPATCH_TIME_FOREVER);
     }
 
     /**
@@ -247,7 +288,12 @@ public:
         dispatch_group_wait(dispatchGroup, DISPATCH_TIME_FOREVER);
         
         if (preservedDataURL) {
-            return QString::fromNSString(preservedDataURL.path);
+            const auto preservedPath = QString::fromNSString(preservedDataURL.path);
+            if (!holdsOnlyFinderMetadata(preservedPath)) {
+                return preservedPath;
+            }
+            qCInfo(lcMacFileProviderDomainManager) << "Preserved data holds only Finder metadata, removing" << preservedPath;
+            QDir(preservedPath).removeRecursively();
         }
         
         return {};
@@ -343,12 +389,15 @@ public:
     }
 
     /**
-     * @brief Update every registered domain's display name to match its account's `shortcutName()`.
+     * @brief Give every registered domain the display name of its account.
      *
-     * Walks every registered `NSFileProviderDomain`, looks up its owning account, and if the
-     * domain's `displayName` differs from `account->shortcutName()` re-registers the domain
-     * in place by calling `addDomain:` again with the same identifier. macOS replaces the
-     * registration, keeping the on-disk data intact.
+     * The display name is fixed when a domain is added: adding it again under the same identifier
+     * does not rename the "DataDrive-<name>" folder or the Finder location. A domain whose name
+     * differs from `domainDisplayName()` is therefore removed and added again under a new
+     * identifier, which the account then points to. The files are downloaded again on demand, and
+     * anything that was not uploaded yet is kept by `removeDomain()`.
+     *
+     * Domains without an account are removed before this runs, by `removeOrphanedDomains()`.
      */
     void reconcileDomainDisplayNames()
     {
@@ -362,26 +411,33 @@ public:
             const auto accountState = accountManager->accountFromFileProviderDomainIdentifier(domainId);
 
             if (!accountState || !accountState->account()) {
-                // Orphan domain — not owned by any current account. `removeOrphanedDomains()`
-                // in the settings controller is responsible for cleanup; nothing to do here.
                 continue;
             }
 
+            const auto account = accountState->account();
             const auto currentDisplayName = QString::fromNSString(domain.displayName);
-            const auto desiredDisplayName = domainDisplayName(accountState->account());
+            const auto desiredDisplayName = domainDisplayName(account);
 
             if (currentDisplayName == desiredDisplayName) {
                 continue;
             }
 
-            qCInfo(lcMacFileProviderDomainManager) << "Updating display name for domain"
-                                                   << domainId
-                                                   << "from" << currentDisplayName
-                                                   << "to" << desiredDisplayName;
+            qCInfo(lcMacFileProviderDomainManager) << "Replacing domain" << domainId
+                                                   << "named" << currentDisplayName
+                                                   << "with one named" << desiredDisplayName;
 
-            NSFileProviderDomain * const updatedDomain = [[NSFileProviderDomain alloc] initWithIdentifier:domain.identifier displayName:desiredDisplayName.toNSString()];
-            updatedDomain.supportsSyncingTrash = YES;
-            addDomain(updatedDomain);
+            removeDomain(domain);
+
+            const auto newDomainId = QUuid::createUuid().toString(QUuid::WithoutBraces);
+            NSFileProviderDomain * const newDomain = [[NSFileProviderDomain alloc] initWithIdentifier:newDomainId.toNSString() displayName:desiredDisplayName.toNSString()];
+            newDomain.supportsSyncingTrash = YES;
+
+            if (!addDomain(newDomain)) {
+                qCWarning(lcMacFileProviderDomainManager) << "Could not add the renamed domain for" << account->userIdAtHostWithPort();
+                continue;
+            }
+
+            accountManager->setFileProviderDomainIdentifier(account->userIdAtHostWithPort(), newDomainId);
         }
 
         qCInfo(lcMacFileProviderDomainManager) << "Finished reconciling file provider domain display names.";
@@ -830,6 +886,12 @@ void FileProviderDomainManager::slotAccountStateChanged(const AccountState * con
     case AccountState::RedirectDetected:
     case AccountState::NeedToSignTermsOfService:
     {
+        if (state == AccountState::SignedOut) {
+            // Logging out locks the drive: it stays in Finder, but nothing in it can be opened.
+            if (NSFileProviderDomain * const domain = domainForAccount(accountState->account().data())) {
+                d->evictAll(domain);
+            }
+        }
         // Disconnect File Provider domain while unauthenticated
         const auto trReason = tr("This account is not authenticated. Please check your account state in the %1 application.").arg(APPLICATION_NAME);
         disconnectFileProviderDomainForAccount(accountState, trReason);

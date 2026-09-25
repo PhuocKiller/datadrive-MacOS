@@ -413,6 +413,9 @@ void HttpCredentials::forgetSensitiveData()
 {
     invalidateToken();
     _previousPassword.clear();
+    // Account setup stores the password once before the account has an id, under the key without
+    // one. invalidateToken() only deletes the entry with the id, so this one outlived the account.
+    deleteOldKeychainEntries();
 }
 
 void HttpCredentials::persist()

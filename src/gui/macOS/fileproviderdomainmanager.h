@@ -111,9 +111,11 @@ public Q_SLOTS:
      */
     void slotHandleFileIdsChanged(const OCC::Account *account, const QList<qint64> &fileIds);
 
+    /// Also called by FileProviderXPC on sign in, which has to talk to the extension after the reconnect.
+    void reconnectFileProviderDomainForAccount(const OCC::AccountState *const accountState);
+
 private Q_SLOTS:
     void disconnectFileProviderDomainForAccount(const OCC::AccountState * const accountState, const QString &reason);
-    void reconnectFileProviderDomainForAccount(const OCC::AccountState * const accountState);
     void slotAccountStateChanged(const OCC::AccountState * const accountState);
 
 private:

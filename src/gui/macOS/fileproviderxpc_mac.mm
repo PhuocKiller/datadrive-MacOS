@@ -7,6 +7,7 @@
 #include "fileproviderxpc.h"
 
 #include <QLoggingCategory>
+#include <QTimer>
 
 #include "csync/csync_exclude.h"
 
@@ -22,6 +23,7 @@
 namespace {
     constexpr int64_t semaphoreWaitDelta = 1000000000; // 1 seconds
     constexpr auto reachableRetryTimeout = 300; // seconds
+    constexpr auto signInReauthenticationAttempts = 6;
 }
 
 namespace OCC::Mac {
@@ -100,7 +102,7 @@ void FileProviderXPC::unauthenticateFileProviderDomain(const QString &fileProvid
     [clientCommService removeAccountConfig];
 }
 
-void FileProviderXPC::slotAccountStateChanged(const AccountState::State state) const
+void FileProviderXPC::slotAccountStateChanged(const AccountState::State state)
 {
     const auto slotSender = dynamic_cast<AccountState*>(sender());
     Q_ASSERT(slotSender);
@@ -122,15 +124,47 @@ void FileProviderXPC::slotAccountStateChanged(const AccountState::State state) c
         unauthenticateFileProviderDomain(fileProviderDomainId);
         break;
     case AccountState::Connected:
-        // Provide credentials
+        reauthenticateAfterSignIn(slotSender, 0);
+        break;
+    }
+}
+
+void FileProviderXPC::reauthenticateAfterSignIn(const QPointer<AccountState> &accountState, const int attempt)
+{
+    if (!accountState || !accountState->account() || accountState->state() != AccountState::Connected) {
+        return;
+    }
+
+    const auto fileProviderDomainId = accountState->account()->fileProviderDomainIdentifier();
+    if (fileProviderDomainId.isEmpty()) {
+        return;
+    }
+
+    // Signing out disconnects the domain, which stops its extension and leaves the connection in
+    // _clientCommServices dead: credentials sent over it vanish and Finder keeps showing the
+    // domain as signed out. So reconnect the domain first, then connect to its extension again.
+    FileProvider::instance()->domainManager()->reconnectFileProviderDomainForAccount(accountState.data());
+    connectToFileProviderDomains();
+
+    if (fileProviderDomainReachable(fileProviderDomainId, false, true)) {
         authenticateFileProviderDomain(fileProviderDomainId);
         // Push the ignore list alongside credentials — the extension rejects
         // `modifyItem` and friends with `.notAuthenticated` as long as its
         // `ignoredFiles` is still `nil`, so a domain that comes online after
         // startup needs both halves of the configuration, not just the one.
         setIgnoreList();
-        break;
+        return;
     }
+
+    // The extension may still be starting after the reconnect.
+    if (attempt + 1 >= ::signInReauthenticationAttempts) {
+        qCWarning(lcFileProviderXPC) << "Gave up authenticating file provider domain" << fileProviderDomainId << "after sign in";
+        return;
+    }
+    qCInfo(lcFileProviderXPC) << "File provider domain" << fileProviderDomainId << "not reachable after sign in, retrying";
+    QTimer::singleShot(std::chrono::seconds(attempt + 1), this, [this, accountState, attempt] {
+        reauthenticateAfterSignIn(accountState, attempt + 1);
+    });
 }
 
 bool FileProviderXPC::fileProviderDomainReachable(const QString &fileProviderDomainIdentifier, const bool retry, const bool reconfigureOnFail)

@@ -201,6 +201,8 @@ void WebFlowCredentials::askForPasswordInApp()
         Q_EMIT asked();
     });
 
+    // Kept above the settings window, whose Log in button opens it.
+    dialog->setWindowFlag(Qt::WindowStaysOnTopHint);
     dialog->open();
     dialog->raise();
     dialog->activateWindow();
@@ -403,6 +405,9 @@ void WebFlowCredentials::forgetSensitiveData() {
     invalidateToken();
 
     deleteKeychainEntries();
+    // Account setup stores the password once before the account has an id, under the key without
+    // one. Nothing reads that entry again, so without this it outlives the account.
+    deleteKeychainEntries(true);
 }
 
 void WebFlowCredentials::setAccount(Account *account) {

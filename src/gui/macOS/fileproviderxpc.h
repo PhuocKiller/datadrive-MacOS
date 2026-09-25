@@ -3,9 +3,10 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
-#include <QObject>
-#include <QHash>
 #include <QDateTime>
+#include <QHash>
+#include <QObject>
+#include <QPointer>
 
 #include "accountstate.h"
 
@@ -39,7 +40,10 @@ public Q_SLOTS:
     void setIgnoreList() const;
 
 private Q_SLOTS:
-    void slotAccountStateChanged(AccountState::State state) const;
+    void slotAccountStateChanged(AccountState::State state);
+
+private:
+    void reauthenticateAfterSignIn(const QPointer<AccountState> &accountState, int attempt);
 
 private:
     //! keys are File Provider domain identifiers

@@ -9,6 +9,7 @@
 #include "common/asserts.h"
 #include "config.h"
 #include "networkjobs.h"
+#include "owncloudgui.h"
 #include "theme.h"
 #include <QBuffer>
 #include <QDesktopServices>
@@ -90,7 +91,11 @@ void HttpCredentialsGui::showDialog()
         dialogLabel->setTextFormat(Qt::RichText);
     }
 
+    // The Log in button sits in the settings window, which covered the dialog: raising alone does
+    // not bring a parentless dialog of a menu bar app in front of it.
+    dialog->setWindowFlag(Qt::WindowStaysOnTopHint);
     dialog->open();
+    ownCloudGui::raiseDialog(dialog);
     connect(dialog, &QDialog::finished, this, [this, dialog](int result) {
         if (result == QDialog::Accepted) {
             _password = dialog->textValue();

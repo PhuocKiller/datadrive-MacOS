@@ -6,6 +6,7 @@
 #include "fileprovider.h"
 
 #include <QLoggingCategory>
+#include <QThread>
 #include <QOperatingSystemVersion>
 
 #include "libsync/configfile.h"
@@ -66,7 +67,15 @@ void FileProvider::configureXPC()
         return;
     }
 
-    _xpc = std::make_unique<FileProviderXPC>(new FileProviderXPC(this));
+    // Enabling an account's domain calls this from a worker thread. The XPC object must live on the
+    // main thread: it receives the account state changes, and a queued slot call to a thread without
+    // an event loop never runs, so signing in again would never send the credentials.
+    if (QThread::currentThread() != thread()) {
+        QMetaObject::invokeMethod(this, &FileProvider::configureXPC, Qt::QueuedConnection);
+        return;
+    }
+
+    _xpc = std::make_unique<FileProviderXPC>();
 
     if (_xpc) {
         qCInfo(lcMacFileProvider) << "Initialised file provider XPC.";
