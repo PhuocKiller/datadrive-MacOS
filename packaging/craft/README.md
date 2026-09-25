@@ -105,14 +105,21 @@ packaging/craft/craft-macos.sh
 App ra ở `~/DataDrive_MacBuild/macos-64-clang/build/nextcloud-client/image-RelWithDebInfo-master/DataDrive.app`,
 đã chứa đủ Qt: bước cài đặt của CMake tự chép framework và plugin vào bundle.
 
-**Đừng chạy `craft-macos.sh --package`** để đóng gói: MacBasePackager của craft chép Qt vào bundle
-lần nữa và dừng ở `mergeTree failed: how to merge ... libqcocoa.dylib`. mac-crafter cũng không
-dùng bước này. Làm DMG bằng `hdiutil`:
+**Đừng chạy `craft-macos.sh --package`**: MacBasePackager của craft chép Qt vào bundle lần nữa và
+dừng ở `mergeTree failed: how to merge ... libqcocoa.dylib`. mac-crafter cũng không dùng bước này.
+Đóng gói bằng:
 
 ```bash
-S=$(mktemp -d); cp -R DataDrive.app "$S/" && ln -s /Applications "$S/Applications"
-hdiutil create -volname DataDrive -srcfolder "$S" -fs HFS+ -format UDZO DataDrive-<ver>-macos-x86_64.dmg
+packaging/craft/craft-macos.sh --bundle 1.0.0
+# -> ~/DataDrive_MacBuild/dist/DataDrive.app và DataDrive-1.0.0-macos-x86_64.dmg
 ```
+
+Bước này bắt buộc, không chỉ để làm DMG. Mọi file Mach-O trong app mà CMake cài ra đều có thêm
+một `LC_RPATH` trỏ tuyệt đối vào `~/DataDrive_MacBuild/macos-64-clang/lib`, và dyld thử nó trước.
+Chạy thẳng app trong `image-…` trên máy build sẽ nạp **hai bản Qt** rồi chết với
+`Cannot add multiple registrations for QtQuick.Templates` (máy khác không có thư mục đó thì lại
+chạy được, nên rất dễ tưởng là ổn). `--bundle` xoá các rpath đó, bỏ bản sao thừa của
+`libdatadrive*.dylib` trong `Contents/MacOS`, rồi kiểm tra không còn tham chiếu nào vào craft.
 
 Chưa có chứng chỉ Developer ID nên app chỉ ký ad-hoc (`codesign --force --deep --sign -`).
 Máy khác mở lần đầu sẽ bị Gatekeeper chặn: chuột phải → Open.
