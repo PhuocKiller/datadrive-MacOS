@@ -389,6 +389,7 @@ IF( APPLE )
 
     list(APPEND client_SRCS nativetitlebar_mac.h)
     list(APPEND client_SRCS nativetitlebar_mac.mm)
+    list(APPEND client_SRCS uninstaller.h uninstaller.cpp)
 
     if(SPARKLE_FOUND AND BUILD_UPDATER)
         # Define this, we need to check in updater.cpp

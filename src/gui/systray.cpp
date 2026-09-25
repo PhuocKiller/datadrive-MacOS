@@ -24,6 +24,7 @@
 
 #ifdef Q_OS_MACOS
 #include "foregroundbackground_interface.h"
+#include "uninstaller.h"
 #endif
 
 #include <QCursor>
@@ -579,6 +580,12 @@ void Systray::setupContextMenu()
     auto resumeAction = _contextMenu->addAction(tr("Resume sync"), this, &Systray::slotUnpauseAllFolders);
     _contextMenu->addAction(tr("Settings"), this, &Systray::openSettings);
     _contextMenu->addAction(tr("Help"), this, &Systray::openHelp);
+#ifdef Q_OS_MACOS
+    // Dragging the app to the Trash would leave the synced folders and the settings behind.
+    _contextMenu->addAction(Uninstaller::actionText(), this, [] {
+        Uninstaller::confirmAndRun();
+    });
+#endif
     _contextMenu->addAction(tr("Exit %1").arg(Theme::instance()->appNameGUI()), this, &Systray::shutdown);
 
     connect(_contextMenu, &QMenu::aboutToShow, [=] {

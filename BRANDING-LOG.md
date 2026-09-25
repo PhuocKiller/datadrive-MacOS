@@ -625,3 +625,31 @@ Tran Huy Phuoc, khớp chứng chỉ Apple đang dùng cho bản iOS). Biến l�
 thành 1.0.0: client gửi số này trong User-Agent (`mirall/34.0.50`), và server Nextcloud chặn
 client cũ hơn `minimum.supported.desktop.version`, mặc định `3.3.50` (`apps/dav/lib/Connector/Sabre/BlockLegacyClientPlugin.php`). Đổi xuống 1.0.0 là
 server trả 403, không đăng nhập được. Bộ cài Windows cũng chỉ đổi số hiển thị trong installer.
+
+### Thư mục đồng bộ mặc định `~/DataDrive-<user>`
+
+Upstream để trống thư mục mặc định trên macOS vì bản của họ dùng File Provider (không cần thư mục).
+Build không có mô-đun đó thì wizard gợi ý luôn thư mục home, rồi báo "Please choose an empty local
+sync folder". `AccountWizardController::initialiseLocalSyncFolder` giờ gợi ý `DataDrive-<davUser>`
+trong home, trên mọi nền tảng, mỗi khi cần thư mục. Bản Windows cũng đổi theo khi build lại.
+
+### Gỡ cài đặt trên macOS xoá luôn thư mục đồng bộ
+
+User yêu cầu: gỡ app thì xoá bản sao trên máy của thư mục đồng bộ, dữ liệu trên server giữ nguyên.
+Điều này **ngược** với quyết định của bộ gỡ Windows ở trên (giữ file người dùng, chỉ xoá thư mục khi
+đã rỗng); bộ gỡ Windows chưa đổi.
+
+macOS không chạy được code nào khi app bị kéo vào Thùng rác, nên có mục **Uninstall DataDrive…**
+trong menu khay (`src/gui/uninstaller.cpp`). Thứ tự là phần quan trọng nhất:
+
+1. `FolderMan::removeFolder` cho từng thư mục — dừng đồng bộ, xoá journal, gỡ cấu hình.
+2. `AccountManager::deleteAccount` — thu hồi app password trên server, xoá mật khẩu trong Keychain.
+3. Tắt khởi động cùng máy, thoát app sau 3 giây (chờ các job Keychain bất đồng bộ).
+4. Một tiến trình `/bin/sh` tách rời **chờ app thoát hẳn** rồi mới xoá thư mục đồng bộ, thư mục cấu
+   hình, cache, và chuyển `DataDrive.app` vào Thùng rác.
+
+Xoá thư mục khi bộ đồng bộ còn chạy thì nó sẽ coi là người dùng xoá file và **xoá luôn trên server**.
+Bước 4 chạy sau khi tiến trình đã chết nên không thể xảy ra chuyện đó. Hộp thoại liệt kê đúng các
+đường dẫn sẽ xoá, và cảnh báo nếu có thư mục chưa đồng bộ xong (đang chạy, tạm dừng, có lỗi, hoặc kết
+quả `Problem` — tức có file bị bỏ qua, chính là file chỉ có trên máy). Không xoá thư mục home, thư mục
+cha của nó hay đường dẫn ngắn hơn hai cấp.
