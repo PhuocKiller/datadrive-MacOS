@@ -96,7 +96,9 @@ set( APPLICATION_HOMEPAGE_URL "https://datadrive.vn" CACHE STRING "URL opened by
 option( APPLICATION_FORCE_IN_APP_LOGIN "Ask for credentials in the client instead of using the browser login flow" ON )
 set( APPLICATION_REV_DOMAIN "vn.datadrive.desktopclient" )
 set( APPLICATION_REV_DOMAIN_DBUS "desktopclient.datadrive.vn" )
-set( DEVELOPMENT_TEAM "NKUJUXUJ3B" CACHE STRING "Apple Development Team ID" )
+# Apple team of Tran Huy Phuoc (the upstream value NKUJUXUJ3B is Nextcloud GmbH's). It prefixes the
+# FinderSync broker bundle identifier and the app group, so it must match the signing certificate.
+set( DEVELOPMENT_TEAM "9BHT63MRZH" CACHE STRING "Apple Development Team ID" )
 set( APPLICATION_VIRTUALFILE_SUFFIX "datadrive" CACHE STRING "Virtual file suffix (not including the .)")
 set( APPLICATION_OCSP_STAPLING_ENABLED OFF )
 set( APPLICATION_FORBID_BAD_SSL OFF )

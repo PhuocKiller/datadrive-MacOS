@@ -584,3 +584,44 @@ này ứng dụng tạo **ngay trong thư mục đồng bộ của người dùn
 `CMakeLists.txt:38,41,45` giữ nguyên GUID của Nextcloud cho AppID, Custom State Handler và
 Thumbnail Handler. Lần trước tôi chỉ soi khối `WIN_SHELLEXT` trong `NEXTCLOUD.cmake` nên bỏ sót.
 Dùng chung CLSID nghĩa là cài cả hai sản phẩm trên một máy sẽ đè lên nhau. Đã sinh mới cả ba.
+
+## macOS (Intel) — 2026-09-25
+
+Build trên máy ảo macOS 15.8 Intel (i5-12500H, 6 nhân, 16 GB), Xcode 26. Script:
+`packaging/craft/craft-macos.sh` (`--setup` lần đầu, sau đó chạy không tham số).
+
+### Không dùng Homebrew
+
+`admin/osx/mac-crafter` cài công cụ qua Homebrew, nhưng Homebrew **đã chặn Mac Intel** ngay trong
+script cài (`Homebrew on macOS is only supported on Apple Silicon processors!`). Script mới chạy
+đúng các lệnh craft mà mac-crafter chạy, còn công cụ thì lấy bản tải thẳng, cài vào thư mục home,
+không cần sudo:
+
+| Công cụ | Nguồn | Vị trí |
+|---|---|---|
+| Python 3.12.14 | python-build-standalone `x86_64-apple-darwin-install_only` | `~/DataDrive_Tools/python`, link ở `~/DataDrive_Tools/bin/python3` |
+| Inkscape 1.4.4 | `Inkscape-1.4.4_x86_64.dmg` từ inkscape.org | `~/Applications/Inkscape.app`, wrapper `~/DataDrive_Tools/bin/inkscape` |
+
+Python hệ thống là 3.9.6, cũ hơn bản craft dùng trên CI (3.12). cmake dừng hẳn nếu không có
+inkscape hoặc rsvg-convert (`GenerateIconsUtils.cmake:14`). Tải Inkscape qua HTTP/2 hay bị đứt
+(`PROTOCOL_ERROR`) trong máy ảo, nên phải dùng `curl --http1.1 -C -`.
+
+Blueprint lấy nhánh `stable-34.0` như bản Windows, không lấy `master` như mặc định của mac-crafter,
+để khớp `Packager/CacheVersion = stable-34.0-qt-6.10.2`. Kho dựng sẵn có đủ bản
+`macos/clang/x86_64/RelWithDebInfo`, nên `--setup` chỉ mất 11 phút (82 gói, 2,6 GB) và không
+biên dịch Qt. Biên dịch client mất 28,5 phút.
+
+### Team ID Apple của Nextcloud còn sót
+
+`NEXTCLOUD.cmake` giữ `DEVELOPMENT_TEAM "NKUJUXUJ3B"`, là team của Nextcloud GmbH. Nó làm tiền tố
+cho bundle id của FinderSync broker và cho app group, nên bản build đầu ra
+`NKUJUXUJ3B.vn.datadrive.desktopclient.FinderSyncBroker.app`. Đổi thành `9BHT63MRZH` (team của
+Tran Huy Phuoc, khớp chứng chỉ Apple đang dùng cho bản iOS). Biến là `CACHE STRING` nên phải xoá
+`work/build/CMakeCache.txt` rồi configure lại. Chỉ ảnh hưởng macOS.
+
+### Giữ số phiên bản 34.0.50
+
+`CFBundleShortVersionString` ra `34.0.50`, là số của Nextcloud. **Không** đổi `MIRALL_VERSION`
+thành 1.0.0: client gửi số này trong User-Agent (`mirall/34.0.50`), và server Nextcloud chặn
+client cũ hơn `minimum.supported.desktop.version`, mặc định `3.3.50` (`apps/dav/lib/Connector/Sabre/BlockLegacyClientPlugin.php`). Đổi xuống 1.0.0 là
+server trả 403, không đăng nhập được. Bộ cài Windows cũng chỉ đổi số hiển thị trong installer.

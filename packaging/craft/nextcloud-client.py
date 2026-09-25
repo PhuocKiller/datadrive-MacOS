@@ -95,6 +95,21 @@ class Package(CMakePackageBase):
         self.defines["appname"] = "datadrive"
         self.defines["company"] = "Tran Huy Phuoc"
         self.applicationExecutable = "datadrive"
+        # For a git target PackagerBase uses the checked-out revision, so the installer ends up
+        # calling its version "master" or, on a work branch, something worse.
+        self.defines["version"] = "1.0.0"
+
+        # The installer defines below only mean something to the NSIS packager.
+        if CraftCore.compiler.isWindows:
+            self._setWindowsInstallerDefines()
+
+        self.ignoredPackages += ["binary/mysql"]
+        if not CraftCore.compiler.isLinux:
+            self.ignoredPackages += ["libs/dbus"]
+
+        return super().createPackage()
+
+    def _setWindowsInstallerDefines(self):
         # Craft khong con doc thuoc tinh applicationExecutable o tren. NullsoftInstallerPackager
         # sinh khoi shortcut tu defines["executable"], duong dan tuong doi so voi $INSTDIR.
         # Thieu dong nay thi bo cai khong tao shortcut Start Menu nao.
@@ -105,11 +120,6 @@ class Package(CMakePackageBase):
         installerIcon = os.path.join(self.sourceDir(), "admin", "win", "nsi", "installer.ico")
         if os.path.isfile(installerIcon):
             self.defines["icon"] = installerIcon
-
-        # For a git target PackagerBase uses the checked-out revision, so the installer ends up
-        # calling its version "master" or, on a work branch, something worse.
-        self.defines["version"] = "1.0.0"
-
         appExecutable = r"$INSTDIR\bin\datadrive.exe"
 
         # The template defines this placeholder ahead of MUI_PAGE_FINISH, which is where
@@ -167,9 +177,3 @@ class Package(CMakePackageBase):
             "SectionEnd",
         ]
         self.defines["un_sections"] = "\n".join(unSections)
-
-        self.ignoredPackages += ["binary/mysql"]
-        if not CraftCore.compiler.isLinux:
-            self.ignoredPackages += ["libs/dbus"]
-
-        return super().createPackage()

@@ -80,3 +80,39 @@ vẫn được dùng. Phải xoá `C:\_\<hash>\build` rồi configure lại.
 **Craft bỏ qua khi tưởng đã xong.** Chạy `craft nextcloud-client` sau khi sửa code có thể ra
 `*** nextcloud-client is up to date, nothing to do ***` và không biên dịch gì. Phải liệt kê
 hành động rõ ràng: `--configure --compile --install --qmerge`.
+
+## macOS (máy Mac Intel)
+
+`admin/osx/mac-crafter` cần Homebrew, mà Homebrew không còn cài được trên Mac Intel.
+`craft-macos.sh` chạy đúng các lệnh craft của mac-crafter, công cụ thì cài tay vào thư mục home:
+
+```bash
+# 1. Công cụ nền (không cần sudo)
+#    - Xcode, xcode-select trỏ vào nó
+#    - Python 3.12: bản python-build-standalone "x86_64-apple-darwin-install_only",
+#      giải nén vào ~/DataDrive_Tools/python, link ~/DataDrive_Tools/bin/python3
+#    - Inkscape: Inkscape-<ver>_x86_64.dmg chép vào ~/Applications, kèm wrapper
+#      ~/DataDrive_Tools/bin/inkscape gọi Inkscape.app/Contents/MacOS/inkscape
+#      (tải bằng curl --http1.1 -C -; HTTP/2 hay đứt trong máy ảo)
+
+# 2. Craft, blueprint và thư viện dựng sẵn (~11 phút, 2,6 GB)
+packaging/craft/craft-macos.sh --setup
+
+# 3. Build (~30 phút lần đầu)
+packaging/craft/craft-macos.sh
+```
+
+App ra ở `~/DataDrive_MacBuild/macos-64-clang/build/nextcloud-client/image-RelWithDebInfo-master/DataDrive.app`,
+đã chứa đủ Qt: bước cài đặt của CMake tự chép framework và plugin vào bundle.
+
+**Đừng chạy `craft-macos.sh --package`** để đóng gói: MacBasePackager của craft chép Qt vào bundle
+lần nữa và dừng ở `mergeTree failed: how to merge ... libqcocoa.dylib`. mac-crafter cũng không
+dùng bước này. Làm DMG bằng `hdiutil`:
+
+```bash
+S=$(mktemp -d); cp -R DataDrive.app "$S/" && ln -s /Applications "$S/Applications"
+hdiutil create -volname DataDrive -srcfolder "$S" -fs HFS+ -format UDZO DataDrive-<ver>-macos-x86_64.dmg
+```
+
+Chưa có chứng chỉ Developer ID nên app chỉ ký ad-hoc (`codesign --force --deep --sign -`).
+Máy khác mở lần đầu sẽ bị Gatekeeper chặn: chuột phải → Open.
