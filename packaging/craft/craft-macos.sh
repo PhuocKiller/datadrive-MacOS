@@ -50,7 +50,7 @@ craftOptions=(
     --options "$BLUEPRINT.osxArchs=x86_64"
     --options "$BLUEPRINT.buildTests=False"
     --options "$BLUEPRINT.buildMacOSBundle=True"
-    --options "$BLUEPRINT.buildFileProviderModule=False"
+    --options "$BLUEPRINT.buildFileProviderModule=True"
     --options "$BLUEPRINT.devMode=False"
 )
 
@@ -87,9 +87,13 @@ signBundle() {
         "${sign[@]}" "$file"
     done
 
-    # 3. The Finder extension and the login item that brokers it, with their own entitlements.
+    # 3. The extensions (Finder Sync, File Provider and its UI) and the Finder Sync login item, each
+    #    with the entitlements file named after it.
     for file in "$app"/Contents/PlugIns/*.appex; do
-        [[ -d $file ]] && "${sign[@]}" --entitlements "$entitlementsDir/shell_integration/MacOSX/FinderSyncExt.entitlements" "$file"
+        [[ -d $file ]] || continue
+        local entitlements="$entitlementsDir/shell_integration/MacOSX/${${file##*/}%.appex}.entitlements"
+        [[ -f $entitlements ]] || { echo "No entitlements for $file" >&2; exit 1; }
+        "${sign[@]}" --entitlements "$entitlements" "$file"
     done
     for file in "$app"/Contents/Library/LoginItems/*.app; do
         [[ -d $file ]] && "${sign[@]}" --entitlements "$entitlementsDir/shell_integration/MacOSX/FinderSyncBroker.entitlements" "$file"

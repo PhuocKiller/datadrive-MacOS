@@ -13,6 +13,10 @@
 #include "syncfolderremoval.h"
 #include "theme.h"
 
+#ifdef BUILD_FILE_PROVIDER_MODULE
+#include "macOS/fileprovider.h"
+#endif
+
 #include <QApplication>
 #include <QDir>
 #include <QFileInfo>
@@ -107,6 +111,16 @@ void Uninstaller::run(const QStringList &localFolders)
         accountManager->deleteAccount(account.data());
     }
     accountManager->save();
+
+#ifdef BUILD_FILE_PROVIDER_MODULE
+    // Virtual files live in File Provider domains that macOS manages; removing the domains makes the
+    // system delete their local copies as well. Asynchronous, covered by the delay before quitting.
+    if (const auto fileProvider = Mac::FileProvider::instance()) {
+        if (const auto domainManager = fileProvider->domainManager()) {
+            domainManager->removeAllDomains();
+        }
+    }
+#endif
 
     Utility::setLaunchOnStartup(Theme::instance()->appName(), Theme::instance()->appNameGUI(), false);
 
