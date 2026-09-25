@@ -9,22 +9,23 @@
 #include "common/filesystembase.h"
 
 #include "accountmanager.h"
-#include "owncloudgui.h"
-#include <pushnotifications.h>
-#include "userstatusselectormodel.h"
-#include "syncengine.h"
-#include "syncresult.h"
-#include "ocsjob.h"
-#include "configfile.h"
-#include "notificationconfirmjob.h"
-#include "logger.h"
-#include "guiutility.h"
-#include "syncresult.h"
-#include "syncfileitem.h"
-#include "systray.h"
 #include "activity/activitylistmodel.h"
-#include "userstatusconnector.h"
 #include "common/utility.h"
+#include "configfile.h"
+#include "folderman.h"
+#include "guiutility.h"
+#include "logger.h"
+#include "notificationconfirmjob.h"
+#include "ocsjob.h"
+#include "owncloudgui.h"
+#include "syncengine.h"
+#include "syncfileitem.h"
+#include "syncfolderremoval.h"
+#include "syncresult.h"
+#include "systray.h"
+#include "userstatusconnector.h"
+#include "userstatusselectormodel.h"
+#include <pushnotifications.h>
 
 #ifdef BUILD_FILE_PROVIDER_MODULE
 #include "gui/macOS/fileprovider.h"
@@ -2292,14 +2293,38 @@ void UserModel::removeAccount(const int id)
         return;
     }
 
-    QMessageBox messageBox(QMessageBox::Question,
-                           tr("Confirm Account Removal"),
-                           tr("<p>Do you really want to remove the connection to the account <i>%1</i>?</p>"
-                              "<p><b>Note:</b> This will <b>not</b> delete any files.</p>")
-                               .arg(Utility::escape(_users[id]->name())),
-                           QMessageBox::NoButton);
-    const auto * const yesButton = messageBox.addButton(tr("Remove connection"), QMessageBox::YesRole);
-    messageBox.addButton(tr("Cancel"), QMessageBox::NoRole);
+    // Removing an account also deletes the local copy of its sync folders; the files on the server
+    // stay. The sync connections go first (deleteAccount removes them), the files after.
+    QStringList localFolders;
+    QStringList notSynced;
+    const auto accountState = _users[id]->accountState();
+    for (const auto folder : FolderMan::instance()->map()) {
+        if (folder->accountState() != accountState.data()) {
+            continue;
+        }
+        localFolders.append(folder->path());
+        if (!SyncFolderRemoval::isFullySynced(folder)) {
+            notSynced.append(folder->path());
+        }
+    }
+
+    const auto htmlList = [](const QStringList &paths) {
+        return Utility::escape(SyncFolderRemoval::bulletList(paths)).replace(QLatin1Char('\n'), QStringLiteral("<br>"));
+    };
+    auto text = tr("<p>Do you really want to remove the account <i>%1</i> from this computer?</p>").arg(Utility::escape(_users[id]->name()));
+    if (!localFolders.isEmpty()) {
+        text += tr("<p>This also deletes the local copy of its synced folders:</p><p>%1</p>").arg(htmlList(localFolders));
+    }
+    text += tr("<p>Your files stay on the server.</p>");
+    if (!notSynced.isEmpty()) {
+        text += tr("<p><b>These folders are not fully synced right now.</b> Anything in them that has not reached the server "
+                   "yet will be lost:</p><p>%1</p>")
+                    .arg(htmlList(notSynced));
+    }
+
+    QMessageBox messageBox(notSynced.isEmpty() ? QMessageBox::Question : QMessageBox::Warning, tr("Confirm Account Removal"), text, QMessageBox::NoButton);
+    const auto *const yesButton = messageBox.addButton(tr("Remove account"), QMessageBox::DestructiveRole);
+    messageBox.setDefaultButton(messageBox.addButton(tr("Cancel"), QMessageBox::RejectRole));
 
     messageBox.exec();
     if (messageBox.clickedButton() != yesButton) {
@@ -2307,6 +2332,7 @@ void UserModel::removeAccount(const int id)
     }
 
     _users[id]->removeAccount();
+    SyncFolderRemoval::deleteLocalCopies(localFolders);
 
     beginRemoveRows(QModelIndex(), id, id);
     _users.removeAt(id);

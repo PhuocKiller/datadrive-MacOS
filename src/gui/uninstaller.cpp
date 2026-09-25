@@ -8,8 +8,8 @@
 #include "accountmanager.h"
 #include "common/utility.h"
 #include "configfile.h"
-#include "folder.h"
 #include "folderman.h"
+#include "syncfolderremoval.h"
 #include "theme.h"
 
 #include <QApplication>
@@ -29,40 +29,6 @@ Q_LOGGING_CATEGORY(lcUninstaller, "nextcloud.gui.uninstaller", QtInfoMsg)
 
 namespace
 {
-
-/// Refuses the home folder, anything above it (including the root) and anything that does not
-/// exist. A sync folder can be configured anywhere, and a bad entry here would delete far more
-/// than one folder.
-bool isSafeToDelete(const QString &path)
-{
-    const auto target = QFileInfo(path).canonicalFilePath();
-    if (target.isEmpty()) {
-        return false;
-    }
-    const auto home = QDir(QDir::homePath()).canonicalPath();
-    const QString homeWithSlash = home + QLatin1Char('/');
-    if (target == home || homeWithSlash.startsWith(target + QLatin1Char('/'))) {
-        return false;
-    }
-    return target.count(QLatin1Char('/')) >= 2;
-}
-
-/// A folder only counts as synced when its last run ended cleanly. "Problem" results carry
-/// ignored or blacklisted items, which are exactly the files that exist only on this computer.
-bool isFullySynced(const Folder *folder)
-{
-    const auto result = folder->syncResult();
-    return !folder->isSyncRunning() && !folder->syncPaused() && result.status() == SyncResult::Success && result.numErrorItems() == 0;
-}
-
-QString bulletList(const QStringList &paths)
-{
-    QStringList lines;
-    for (const auto &path : paths) {
-        lines.append(QStringLiteral("• ") + QDir::toNativeSeparators(path));
-    }
-    return lines.join(QLatin1Char('\n'));
-}
 
 /// Waits for the client to exit, deletes the given paths, then moves the app bundle to the Trash.
 /// Arguments: pid, app bundle ("" for none), then the paths to delete.
@@ -90,7 +56,7 @@ void Uninstaller::confirmAndRun(QWidget *parent)
     QStringList notSynced;
     for (const auto folder : folders) {
         localFolders.append(folder->path());
-        if (!isFullySynced(folder)) {
+        if (!SyncFolderRemoval::isFullySynced(folder)) {
             notSynced.append(folder->path());
         }
     }
@@ -98,13 +64,13 @@ void Uninstaller::confirmAndRun(QWidget *parent)
     auto details = localFolders.isEmpty() ? tr("This removes your accounts, the saved password and the settings of %1 from this computer.").arg(appName)
                                           : tr("This removes your accounts, the saved password and the settings of %1 from this computer, "
                                                "and deletes the local copies of your synced folders:\n\n%2")
-                                                .arg(appName, bulletList(localFolders));
+                                                .arg(appName, SyncFolderRemoval::bulletList(localFolders));
     details += QStringLiteral("\n\n") + tr("Your files stay on the server.");
     if (!notSynced.isEmpty()) {
         details += QStringLiteral("\n\n")
             + tr("These folders are not fully synced right now. Anything in them that has not "
                  "reached the server yet will be lost:\n\n%1")
-                  .arg(bulletList(notSynced));
+                  .arg(SyncFolderRemoval::bulletList(notSynced));
     }
 
     QMessageBox box(parent);
@@ -146,7 +112,7 @@ void Uninstaller::run(const QStringList &localFolders)
     QStringList targets;
     const auto candidates = QStringList{localFolders} << ConfigFile().configPath() << QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
     for (const auto &path : candidates) {
-        if (isSafeToDelete(path)) {
+        if (SyncFolderRemoval::isSafeToDelete(path)) {
             targets.append(QFileInfo(path).canonicalFilePath());
         } else {
             qCWarning(lcUninstaller) << "Not deleting" << path;
