@@ -15,6 +15,7 @@
 
 #include "systray.h"
 #include "tray/usermodel.h"
+#include "uninstaller.h"
 
 #include <QCoreApplication>
 #include <QVariantMap>
@@ -260,6 +261,25 @@ using namespace OCC::Mac::TrayPopupViewUtils;
     } hoverAction:^(NSView *) {
         [weakSelf closeAccountActionsPopup];
     }]);
+    // Dragging the app to the Trash runs no code, so this is how the synced folders, the File Provider
+    // domains and the settings get removed along with it (see Uninstaller).
+    addOwnedArrangedSubview(_stack,
+                            [[NCActionRow alloc] initWithTitle:OCC::Uninstaller::actionText().toNSString()
+                                width:kPopupWidth
+                                enabled:YES
+                                action:^{
+                                    [weakSelf orderOut:nil];
+                                    OCC::Systray::instance()->setIsOpen(false);
+                                    // Queued: the confirmation box runs its own event loop, which must not start inside this click.
+                                    QMetaObject::invokeMethod(
+                                        qApp,
+                                        [] {
+                                            [NSApp activateIgnoringOtherApps:YES];
+                                            OCC::Uninstaller::confirmAndRun();
+                                        },
+                                        Qt::QueuedConnection);
+                                }
+                                hoverAction:^(NSView *) { [weakSelf closeAccountActionsPopup]; }]);
     addOwnedArrangedSubview(_stack, [[NCActionRow alloc] initWithTitle:OCC::Systray::tr("Quit").toNSString()
                                                                  width:kPopupWidth
                                                                enabled:YES

@@ -18,6 +18,10 @@ endif()
 
 set( APPLICATION_CONFIG_NAME "${APPLICATION_EXECUTABLE}" )
 set( APPLICATION_DOMAIN     "datadrive.vn" )
+# The product version people see (Settings > Info, Finder > Get Info). The client still reports the
+# upstream MIRALL_VERSION to the server, which refuses clients older than
+# minimum.supported.desktop.version (3.3.50 by default), so that number has to stay.
+set( APPLICATION_DISPLAY_VERSION "1.0.0" )
 set( APPLICATION_VENDOR     "Tran Huy Phuoc" )
 # Empty on purpose: this build ships no update server, and BUILD_UPDATER below is off. Leaving
 # the upstream address here would point the updater at releases of a different product.

@@ -61,6 +61,13 @@ else()
 endif()
 
 # Append build info if available
+# The macOS bundle version Finder shows. Numeric, unlike the human string of a pre-release.
+set(MIRALL_BUNDLE_SHORT_VERSION "${MIRALL_VERSION_STRING}")
+if(DEFINED APPLICATION_DISPLAY_VERSION)
+    set(MIRALL_HUMAN_VERSION_STRING "${APPLICATION_DISPLAY_VERSION}")
+    set(MIRALL_BUNDLE_SHORT_VERSION "${APPLICATION_DISPLAY_VERSION}")
+endif()
+
 if(MIRALL_VERSION_BUILD)
     set(MIRALL_VERSION_STRING "${MIRALL_VERSION_STRING} (build ${MIRALL_VERSION_BUILD})")
 endif()
