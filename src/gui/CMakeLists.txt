@@ -163,6 +163,8 @@ set(client_SRCS
     syncrunfilelog.h
     syncrunfilelog.cpp
     systray.h
+    folderlock.h
+    folderlock.cpp
     syncfolderremoval.h
     syncfolderremoval.cpp
     systray.cpp

@@ -12,6 +12,7 @@
 #include "activity/activitylistmodel.h"
 #include "common/utility.h"
 #include "configfile.h"
+#include "folderlock.h"
 #include "folderman.h"
 #include "guiutility.h"
 #include "logger.h"
@@ -2331,6 +2332,10 @@ void UserModel::removeAccount(const int id)
         return;
     }
 
+    // A signed-out account's folders are locked; removing the connection has to reach their journal.
+    for (const auto &path : localFolders) {
+        FolderLock::unlock(path);
+    }
     _users[id]->removeAccount();
     SyncFolderRemoval::deleteLocalCopies(localFolders);
 

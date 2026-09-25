@@ -5,23 +5,24 @@
  */
 
 #include "folderman.h"
+#include "account.h"
+#include "accountmanager.h"
+#include "accountstate.h"
+#include "common/asserts.h"
 #include "configfile.h"
+#include "filesystem.h"
 #include "folder.h"
+#include "folderlock.h"
+#include "gui/systray.h"
+#include "lockwatcher.h"
+#include "logger.h"
+#include "settings/migration.h"
+#include "socketapi/socketapi.h"
 #include "syncresult.h"
 #include "theme.h"
-#include "socketapi/socketapi.h"
-#include "account.h"
-#include "accountstate.h"
-#include "accountmanager.h"
-#include "filesystem.h"
-#include "lockwatcher.h"
-#include "common/asserts.h"
-#include "gui/systray.h"
-#include "logger.h"
+#include "updatee2eefolderusersmetadatajob.h"
 #include <pushnotifications.h>
 #include <syncengine.h>
-#include "updatee2eefolderusersmetadatajob.h"
-#include "settings/migration.h"
 
 #ifdef Q_OS_MACOS
 #include <CoreServices/CoreServices.h>
@@ -967,6 +968,12 @@ void FolderMan::slotAccountStateChanged()
         qCInfo(lcFolderMan) << "Account" << accountName << "connected, scheduling its folders";
 
         const auto folderMapValues = _folderMap.values();
+        // Folders locked while the account was signed out have to be readable before any sync.
+        for (const auto f : folderMapValues) {
+            if (f && f->accountState() == accountState && FolderLock::isLocked(f->path())) {
+                FolderLock::unlock(f->path());
+            }
+        }
         for (const auto f : folderMapValues) {
             if (f
                 && f->canSync()
@@ -995,6 +1002,27 @@ void FolderMan::slotAccountStateChanged()
             }
         }
         Q_EMIT scheduleQueueChanged();
+
+        // Logging out locks the account's folders until it logs in again. A folder whose run was
+        // just terminated is locked once that run has stopped, never while it may still read.
+        if (accountState->state() == AccountState::SignedOut) {
+            for (const auto f : folderValues) {
+                if (!f || f->accountState() != accountState) {
+                    continue;
+                }
+                if (!f->isSyncRunning()) {
+                    FolderLock::lock(f->path());
+                    continue;
+                }
+                const auto connection = std::make_shared<QMetaObject::Connection>();
+                *connection = connect(f, &Folder::syncFinished, this, [f, connection] {
+                    QObject::disconnect(*connection);
+                    if (f->accountState() && f->accountState()->state() == AccountState::SignedOut) {
+                        FolderLock::lock(f->path());
+                    }
+                });
+            }
+        }
     }
 }
 

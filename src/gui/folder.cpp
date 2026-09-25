@@ -10,24 +10,25 @@
 #include "account.h"
 #include "accountmanager.h"
 #include "accountstate.h"
-#include "folder.h"
-#include "folderman.h"
-#include "logger.h"
-#include "configfile.h"
-#include "networkjobs.h"
-#include "common/syncjournalfilerecord.h"
-#include "syncresult.h"
 #include "clientproxy.h"
-#include "syncengine.h"
-#include "syncrunfilelog.h"
-#include "socketapi/socketapi.h"
-#include "theme.h"
-#include "filesystem.h"
-#include "localdiscoverytracker.h"
-#include "csync_exclude.h"
+#include "common/syncjournalfilerecord.h"
 #include "common/vfs.h"
+#include "configfile.h"
 #include "creds/abstractcredentials.h"
+#include "csync_exclude.h"
+#include "filesystem.h"
+#include "folder.h"
+#include "folderlock.h"
+#include "folderman.h"
+#include "localdiscoverytracker.h"
+#include "logger.h"
+#include "networkjobs.h"
 #include "settingsdialog.h"
+#include "socketapi/socketapi.h"
+#include "syncengine.h"
+#include "syncresult.h"
+#include "syncrunfilelog.h"
+#include "theme.h"
 #include "vfsdownloaderrordialog.h"
 
 #ifdef Q_OS_MACOS
@@ -230,7 +231,11 @@ bool Folder::checkLocalPath()
 
     _canonicalLocalPath = Utility::trailingSlashPath(_canonicalLocalPath);
 
-    if (FileSystem::isDir(_definition.localPath) && FileSystem::isReadable(_definition.localPath)) {
+    if (FolderLock::isLocked(_definition.localPath)) {
+        // Locked because its account is signed out; FolderMan unlocks it before the next sync.
+        // Treating it as unreadable would leave the folder in SetupError after logging in again.
+        qCInfo(lcFolder) << "Local path is locked while its account is signed out:" << _definition.localPath;
+    } else if (FileSystem::isDir(_definition.localPath) && FileSystem::isReadable(_definition.localPath)) {
         qCDebug(lcFolder) << "Checked local path ok";
     } else {
         QString error;

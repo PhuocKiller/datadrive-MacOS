@@ -8,6 +8,7 @@
 #include "accountmanager.h"
 #include "common/utility.h"
 #include "configfile.h"
+#include "folderlock.h"
 #include "folderman.h"
 #include "syncfolderremoval.h"
 #include "theme.h"
@@ -34,12 +35,11 @@ namespace
 /// Arguments: pid, app bundle ("" for none), then the paths to delete.
 const auto helperScript = QStringLiteral(R"sh(pid=$1; app=$2; shift 2
 while kill -0 "$pid" 2>/dev/null; do sleep 0.5; done
-for target in "$@"; do rm -rf -- "$target"; done
+for target in "$@"; do chmod u+rwx -- "$target" 2>/dev/null; rm -rf -- "$target"; done
 if [ -n "$app" ] && [ -d "$app" ]; then
     mv -- "$app" "$HOME/.Trash/$(basename "$app" .app) $(date '+%Y-%m-%d %H.%M.%S').app"
 fi
 )sh");
-
 }
 
 QString Uninstaller::actionText()
@@ -96,6 +96,8 @@ void Uninstaller::run(const QStringList &localFolders)
     const auto folderMan = FolderMan::instance();
     const auto folders = folderMan->map().values();
     for (const auto folder : folders) {
+        // A signed-out account's folder is locked, and the helper below could not delete it.
+        FolderLock::unlock(folder->path());
         folderMan->removeFolder(folder);
     }
 

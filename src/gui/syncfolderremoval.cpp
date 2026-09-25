@@ -6,6 +6,7 @@
 #include "syncfolderremoval.h"
 
 #include "folder.h"
+#include "folderlock.h"
 #include "folderman.h"
 
 #include <QCoreApplication>
@@ -61,6 +62,8 @@ void deleteLocalCopies(const QStringList &paths)
                 qCWarning(lcSyncFolderRemoval) << "Not deleting" << path << "- a sync folder still uses it";
                 continue;
             }
+            // A signed-out account's folder is locked; nothing inside it can be deleted until then.
+            FolderLock::unlock(path);
             if (!isSafeToDelete(path)) {
                 qCWarning(lcSyncFolderRemoval) << "Not deleting" << path;
                 continue;
