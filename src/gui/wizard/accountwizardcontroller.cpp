@@ -61,6 +61,16 @@ Q_LOGGING_CATEGORY(lcAccountWizardController, "nextcloud.gui.accountwizardcontro
 
 namespace {
 
+#ifdef Q_OS_MACOS
+/// A sandboxed app may only write to folders the user picked in a file panel, which is why upstream
+/// makes the user pick one on macOS. DataDrive ships without the sandbox
+/// (admin/osx/macosx.entitlements.cmake), so the suggested folder can be used and created as is.
+bool isAppSandboxed()
+{
+    return qEnvironmentVariableIsSet("APP_SANDBOX_CONTAINER_ID");
+}
+#endif
+
 bool localFolderContainsData(const QString &localSyncFolder)
 {
     const auto localFolder = QDir(localSyncFolder);
@@ -1380,10 +1390,7 @@ void AccountWizardController::setLocalSyncFolder(const QString &localSyncFolder,
 void AccountWizardController::promptForInitialLocalSyncFolderIfNeeded()
 {
 #ifdef Q_OS_MACOS
-    if (_initialLocalSyncFolderPromptShown
-        || _localSyncFolderSelected
-        || _currentStep != SyncOptionsStep
-        || !localSyncFolderRequired()) {
+    if (!isAppSandboxed() || _initialLocalSyncFolderPromptShown || _localSyncFolderSelected || _currentStep != SyncOptionsStep || !localSyncFolderRequired()) {
         return;
     }
 
@@ -1441,7 +1448,7 @@ void AccountWizardController::validateLocalSyncFolder()
     if (folderRequired && _localSyncFolderPickerOpen) {
         localSyncFolderError.clear();
     }
-    if (folderRequired && !_localSyncFolderSelected && !_localSyncFolderPickerOpen) {
+    if (folderRequired && !_localSyncFolderSelected && !_localSyncFolderPickerOpen && isAppSandboxed()) {
         localSyncFolderError = tr("Please choose a local sync folder.");
     }
 #endif
