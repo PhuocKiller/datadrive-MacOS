@@ -1340,13 +1340,17 @@ void AccountWizardController::initialiseLocalSyncFolder()
     QString localFolder;
     if (overrideLocalDir) {
         localFolder = cfg.overrideLocalDir();
-    } else {
-#ifndef Q_OS_MACOS
+    } else if (localSyncFolderRequired()) {
+        // "DataDrive-<user>" in the home folder, so each account gets its own folder by default.
+        // Upstream leaves this empty on macOS, where the File Provider module needs no folder; a
+        // build without that module then offered the home folder itself, which is never empty.
         localFolder = Theme::instance()->defaultClientFolder();
+        if (_account && !_account->davUser().isEmpty()) {
+            localFolder += QLatin1Char('-') + _account->davUser();
+        }
         if (!QDir(localFolder).isAbsolute()) {
             localFolder = QDir::homePath() + QLatin1Char('/') + localFolder;
         }
-#endif
     }
 
     const auto strategy = overrideLocalDir
