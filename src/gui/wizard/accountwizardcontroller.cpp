@@ -612,7 +612,8 @@ void AccountWizardController::setBasicAuthPassword(const QString &password)
 
 bool AccountWizardController::basicAuthValid() const
 {
-    return !_basicAuthUser.isEmpty();
+    // A public share link may have no password; an account always has one.
+    return !_basicAuthUser.trimmed().isEmpty() && (_publicShareSetup || !_basicAuthPassword.isEmpty());
 }
 
 bool AccountWizardController::publicShareSetup() const
@@ -719,7 +720,7 @@ void AccountWizardController::submitBasicAuth()
     }
 
     if (!basicAuthValid()) {
-        setErrorText(tr("Username must not be empty."));
+        setErrorText(_basicAuthUser.trimmed().isEmpty() ? tr("Username must not be empty.") : tr("Password must not be empty."));
         return;
     }
 
@@ -1946,6 +1947,7 @@ void AccountWizardController::setPublicShareSetup(bool publicShareSetup)
 
     _publicShareSetup = publicShareSetup;
     Q_EMIT publicShareSetupChanged();
+    Q_EMIT basicAuthChanged();
 }
 
 void AccountWizardController::setServerUrlEditable(bool editable)

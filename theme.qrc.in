@@ -190,6 +190,8 @@
 		<file>theme/black/bell.svg</file>
 		<file>theme/black/calendar.svg</file>
 		<file>theme/black/caret-down.svg</file>
+		<file>theme/black/eye.svg</file>
+		<file>theme/black/eye-off.svg</file>
 		<file>theme/black/change.svg</file>
 		<file>theme/black/clear.svg</file>
 		<file>theme/black/filter.svg</file>
@@ -235,6 +237,8 @@
 		<file>theme/white/bell.svg</file>
 		<file>theme/white/calendar.svg</file>
 		<file>theme/white/caret-down.svg</file>
+		<file>theme/white/eye.svg</file>
+		<file>theme/white/eye-off.svg</file>
 		<file>theme/white/change.svg</file>
 		<file>theme/white/close.svg</file>
 		<file>theme/white/comment.svg</file>

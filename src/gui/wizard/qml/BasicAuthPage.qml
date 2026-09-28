@@ -54,14 +54,51 @@ Item {
         }
 
         WizardTextField {
+            id: passwordField
+
+            property bool passwordShown: false
+
             Layout.fillWidth: true
+            rightPadding: showPasswordButton.width + 8
             text: root.controller.basicAuthPassword
             enabled: !root.controller.busy
             placeholderText: qsTr("Password")
-            echoMode: TextInput.Password
+            echoMode: passwordShown ? TextInput.Normal : TextInput.Password
             selectByMouse: true
             onTextEdited: root.controller.basicAuthPassword = text
             onAccepted: root.controller.submitBasicAuth()
+
+            // Shows the password while typing, to catch typos
+            Item {
+                id: showPasswordButton
+
+                width: 36
+                height: parent.height
+                anchors.right: parent.right
+                anchors.rightMargin: 4
+                Accessible.role: Accessible.Button
+                Accessible.name: passwordField.passwordShown ? qsTr("Hide password") : qsTr("Show password")
+
+                Image {
+                    anchors.centerIn: parent
+                    width: 18
+                    height: 18
+                    sourceSize.width: 18
+                    sourceSize.height: 18
+                    source: "image://svgimage-custom-color/" + (passwordField.passwordShown ? "eye-off.svg" : "eye.svg")
+                        + "/" + (showPasswordMouseArea.containsMouse ? root.primaryTextColor : root.hintTextColor)
+                    opacity: passwordField.enabled ? 1 : 0.45
+                }
+
+                MouseArea {
+                    id: showPasswordMouseArea
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    enabled: passwordField.enabled
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: passwordField.passwordShown = !passwordField.passwordShown
+                }
+            }
         }
 
         EnforcedPlainTextLabel {
