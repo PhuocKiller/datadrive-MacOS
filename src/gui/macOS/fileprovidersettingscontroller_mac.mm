@@ -61,6 +61,7 @@ public:
             // conflict with classic sync folders can be put in front of the user.
             Mac::FileProvider::instance()->domainManager()->reconcileDomainDisplayNames();
             Mac::FileProvider::instance()->domainManager()->reconnectAll();
+            Mac::FileProvider::instance()->domainManager()->updateSidebarLabelDomain();
             Mac::FileProvider::instance()->configureXPC();
         } else {
             disableFileProviderForAllEnabledAccountsOnUnsupportedOS();
@@ -339,6 +340,10 @@ public:
 
         for (NSFileProviderDomain * const domain : domains) {
             const auto identifier = QString::fromNSString(domain.identifier);
+
+            if (Mac::FileProviderDomainManager::isSidebarLabelDomain(identifier)) {
+                continue;
+            }
 
             if (!configuredDomainIdentifiers.contains(identifier)) {
                 qCInfo(lcFileProviderSettingsController) << "Identified orphaned domain" << domain.identifier;

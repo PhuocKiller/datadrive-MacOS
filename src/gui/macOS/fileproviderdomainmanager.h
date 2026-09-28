@@ -71,6 +71,18 @@ public:
 
     void start();
 
+    /**
+     * @brief Keep the hidden domain that makes Finder name every account "<app> - <user>".
+     *
+     * Finder labels the only domain of a provider with the app name alone, and uses
+     * "<app> - <domain display name>" once there are several. A hidden domain, registered while at
+     * least one account has a domain, keeps the second form with a single account too.
+     */
+    void updateSidebarLabelDomain();
+
+    /// Whether the identifier belongs to the hidden domain of `updateSidebarLabelDomain()`, which has no account.
+    [[nodiscard]] static bool isSidebarLabelDomain(const QString &domainIdentifier);
+
     [[nodiscard]] QList<NSFileProviderDomain *> getDomains() const;
 
     NSFileProviderDomain *domainForAccount(const OCC::Account *account) const;

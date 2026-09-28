@@ -33,8 +33,9 @@ Q_LOGGING_CATEGORY(lcMacFileProviderDomainManager, "nextcloud.gui.macfileprovide
 namespace
 {
 
-/// Finder names the domain folder "<app>-<domain display name>", so the domain is named after the user
-/// alone to give "DataDrive-<user>", like the classic sync folder ~/DataDrive-<user>. Upstream uses
+/// Finder names the domain folder "<app>-<domain display name>" and the sidebar location
+/// "<app> - <domain display name>", with <app> the file name of the bundle ("datadrive.vn"). The domain
+/// is therefore named after the user alone, giving "datadrive.vn - <user>". Upstream uses
 /// "<server> - <user>" instead, which in a single-server build only repeats the server.
 ///
 /// A user name ending in an extension LaunchServices treats as a package (someone@example.app) would
@@ -54,6 +55,9 @@ QString domainDisplayName(const OCC::AccountPtr &account)
     }
     return user;
 }
+
+/// The hidden domain of `updateSidebarLabelDomain()`.
+const auto sidebarLabelDomainIdentifier = QStringLiteral("sidebar-label");
 
 /// Removing a domain while preserving dirty user data leaves a "DataDrive-<user> (<date>)" folder as
 /// soon as Finder has written a .DS_Store into the domain, even when every file was synced. A folder
@@ -443,6 +447,28 @@ public:
         qCInfo(lcMacFileProviderDomainManager) << "Finished reconciling file provider domain display names.";
     }
 
+    void updateSidebarLabelDomain()
+    {
+        NSFileProviderDomain *labelDomain = nil;
+        auto accountDomains = 0;
+        for (NSFileProviderDomain * const domain : getDomains()) {
+            if (QString::fromNSString(domain.identifier) == sidebarLabelDomainIdentifier) {
+                labelDomain = domain;
+            } else {
+                ++accountDomains;
+            }
+        }
+
+        if (accountDomains > 0 && !labelDomain) {
+            NSFileProviderDomain * const domain = [[NSFileProviderDomain alloc] initWithIdentifier:sidebarLabelDomainIdentifier.toNSString()
+                                                                                       displayName:@APPLICATION_DOMAIN];
+            domain.hidden = YES;
+            addDomain(domain);
+        } else if (accountDomains == 0 && labelDomain) {
+            removeDomain(labelDomain);
+        }
+    }
+
     /**
      * @brief Remove all file provider domains one by one and also their associated data.
      */
@@ -631,6 +657,20 @@ void FileProviderDomainManager::reconcileDomainDisplayNames()
     d->reconcileDomainDisplayNames();
 }
 
+void FileProviderDomainManager::updateSidebarLabelDomain()
+{
+    if (!d) {
+        return;
+    }
+
+    d->updateSidebarLabelDomain();
+}
+
+bool FileProviderDomainManager::isSidebarLabelDomain(const QString &domainIdentifier)
+{
+    return domainIdentifier == sidebarLabelDomainIdentifier;
+}
+
 QString FileProviderDomainManager::removeDomain(NSFileProviderDomain *domain)
 {
     if (!d || !domain) {
@@ -660,6 +700,8 @@ QString FileProviderDomainManager::addDomainForAccount(const AccountState * cons
     connect(accountState, &AccountState::stateChanged, this, [this, accountState] {
         slotAccountStateChanged(accountState);
     });
+
+    d->updateSidebarLabelDomain();
 
     return identifier;
 }
@@ -821,7 +863,9 @@ QString FileProviderDomainManager::removeDomainByAccount(const AccountState * co
         return {};
     }
 
-    return d->removeDomain(domain);
+    const auto preservedDataPath = d->removeDomain(domain);
+    d->updateSidebarLabelDomain();
+    return preservedDataPath;
 }
 
 void FileProviderDomainManager::disconnectFileProviderDomainForAccount(const AccountState * const accountState, const QString &reason)
