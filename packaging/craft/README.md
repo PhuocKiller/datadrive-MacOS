@@ -111,7 +111,7 @@ dừng ở `mergeTree failed: how to merge ... libqcocoa.dylib`. mac-crafter cũ
 
 ```bash
 packaging/craft/craft-macos.sh --bundle 1.0.0
-# -> ~/DataDrive_MacBuild/dist/DataDrive.app và DataDrive-1.0.0-macos-x86_64.dmg
+# -> ~/DataDrive_MacBuild/dist/datadrive.vn.app và DataDrive-1.0.0-macos-x86_64.dmg
 ```
 
 Bước này bắt buộc, không chỉ để làm DMG. Mọi file Mach-O trong app mà CMake cài ra đều có thêm
@@ -137,3 +137,46 @@ và không build mô-đun File Provider. Thiếu `DATADRIVE_SIGN_IDENTITY` thì 
 
 App **không dùng sandbox** (`admin/osx/macosx.entitlements.cmake`): nó phải tự tạo và tự xoá thư mục
 đồng bộ. Hệ quả là không đưa lên Mac App Store được, chỉ phát hành DMG.
+
+### Bản universal (Intel + Apple Silicon) build trên Mac Intel
+
+Không cần Mac M. Nextcloud có sẵn bộ thư viện arm64 dựng sẵn (Qt, OpenSSL, KArchive…) trong cùng
+craft cache, nên chỉ phải cross-compile riêng client:
+
+```bash
+packaging/craft/craft-macos.sh --setup-arm64   # lần đầu: ~/DataDrive_MacBuild/macos-clang-arm64
+packaging/craft/craft-macos.sh                 # bản x86_64 như cũ
+packaging/craft/craft-macos.sh --arm64         # bản arm64, cross-compile
+packaging/craft/craft-macos.sh --bundle 1.0.0  # thấy có bản arm64 thì gộp: DataDrive-1.0.0-macos-universal.dmg
+packaging/craft/craft-macos.sh --notarize 1.0.0
+```
+
+Hai bản phải build **từ cùng một commit**, vì `--bundle` gộp chúng bằng `lipo` từng file một.
+Muốn quay về bản chỉ có x86_64 thì xoá `macos-clang-arm64/build/nextcloud-client/image-RelWithDebInfo-master`.
+
+Công cụ trong root arm64 đều là binary arm64, không chạy được trên Intel (`Bad CPU type in executable`).
+Vì vậy:
+- `--setup-arm64` chép hai kho blueprint từ root x86_64 sang, không để craft tự clone.
+- `--arm64` dùng cmake, ninja, pkg-config và các công cụ Qt (moc, rcc, qmlcachegen…, qua
+  `QT_HOST_PATH`) của root x86_64, còn thư viện thì lấy từ root arm64.
+- `macdeployqt` được thay bằng `craft-macdeployqt-arm64.sh`. Script này chạy bản x86_64, lấy plugin
+  và QML plugin theo đường dẫn của Qt host, rồi thay từng file đó bằng bản arm64 cùng tên, giữ
+  nguyên install name mà macdeployqt đã sửa.
+
+Mỗi lát (slice) trong file universal có rpath riêng, nên `--bundle` phải xoá rpath trỏ vào craft ở
+từng bản đơn trước khi `lipo`. Máy ảo Intel chỉ chạy thử được phần x86_64; phần arm64 chỉ kiểm tra
+được bằng `lipo -archs` và `codesign --verify`.
+
+### Tên trong Finder: "datadrive.vn - <email>"
+
+Finder đặt tên vị trí File Provider trên sidebar theo **tên file của bundle**, không theo
+`CFBundleName` hay `CFBundleDisplayName` (đã thử cả hai, kể cả `InfoPlist.strings`). Vì vậy
+`--bundle` đổi tên app thành `<CFBundleDisplayName>.app` = `datadrive.vn.app`.
+
+Khi chỉ có một domain, Finder chỉ ghi tên app ("datadrive.vn"). Khi có từ hai domain trở lên, Finder
+ghi "datadrive.vn - <tên domain>". App giữ thêm một domain ẩn (`sidebar-label`, `hidden = YES`) khi còn
+ít nhất một tài khoản, nên một tài khoản cũng hiện "datadrive.vn - <email>". Domain này không có tài
+khoản; `removeOrphanedDomains()` bỏ qua nó, còn bỏ tài khoản cuối cùng hoặc Uninstall thì xoá nó đi.
+Nó chỉ để lại thư mục `~/Library/CloudStorage/datadrive.vn-datadrive.vn`.
+
+Người đã cài bản cũ tên `DataDrive.app` phải tự xoá bản đó: bản mới có tên file khác nên không ghi đè.
