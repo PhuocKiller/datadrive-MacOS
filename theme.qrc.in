@@ -301,6 +301,7 @@
 		<file>theme/external.svg</file>
 		<file>theme/globe.svg</file>
 		<file>theme/delete.svg</file>
+		<file>theme/trash.svg</file>
 		<file>theme/send.svg</file>
 		<file>theme/talk-app.svg</file>
 		<file>theme/chevron-double-up.svg</file>

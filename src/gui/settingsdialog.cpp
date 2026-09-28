@@ -18,6 +18,10 @@
 #include "owncloudgui.h"
 #include "accountmanager.h"
 
+#ifdef Q_OS_MACOS
+#include "uninstaller.h"
+#endif
+
 #include <QLabel>
 #include <QStandardItemModel>
 #include <QStackedWidget>
@@ -185,6 +189,17 @@ SettingsDialog::SettingsDialog(ownCloudGui *gui, QWidget *parent)
     addSettingsPage(QLatin1String(":/client/theme/settings.svg"), tr("General"), new GeneralSettings(this));
     addSettingsPage(QLatin1String(":/client/theme/advanced.svg"), tr("Advanced"), new AdvancedSettings(this));
     addSettingsPage(QLatin1String(":/client/theme/info.svg"), tr("Info"), new InfoSettings(this), true);
+
+#ifdef Q_OS_MACOS
+    // Same action as the "Uninstall DataDrive…" row of the tray popup.
+    auto *uninstallAction = createColorAwareAction(QLatin1String(":/client/theme/trash.svg"), tr("Uninstall"));
+    uninstallAction->setObjectName("settingsdialog_uninstall"_L1);
+    uninstallAction->setCheckable(false);
+    connect(uninstallAction, &QAction::triggered, this, [this] {
+        Uninstaller::confirmAndRun(this);
+    });
+    _toolBar->addAction(uninstallAction);
+#endif
 
     QTimer::singleShot(1, this, &SettingsDialog::showFirstPage);
 
